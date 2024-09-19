@@ -1,56 +1,64 @@
 const fs = require('fs');
 const path = require('path');
 
+const loadFile = (request, response, filePath, contentType) => {
+  const file = path.resolve(__dirname, filePath);
 
+  fs.stat(file, (err, stats) => {
+    if (err) {
+      if (err.code === 'ENOENT') {
+        response.writeHead(404);
+      }
+      return response.end(err);
+    }
 
-const getParty = (request, response) => {
-    const file = path.resolve(__dirname, '../client/party.mp4');
+    let { range } = request.headers;
 
-    fs.stat(file, (err, stats) => {
-        if (err) {
-            if (err.code === 'ENOENT') {
-                response.writeHead(404);
-            }
-            return response.end(err);
-        }
+    if (!range) {
+      range = 'bytes=0-';
+    }
 
-        let {range} = request.headers;
+    const positions = range.replace(/bytes=/, '').split('-');
 
-        if (!range) {
-            range = 'bytes=0-';
-        }
+    let start = parseInt(positions[0], 10);
 
-        const positions = range.replace(/bytes=/, '').split('-');
+    const total = stats.size;
+    const end = positions[1] ? parseInt(positions[1], 10) : total - 1;
 
-        let start = parseInt([positions[0], 10]);
+    if (start > end) {
+      start = end - 1;
+    }
 
-        const total = stats.size;
-        const end = positions[1] ? parseInt(positions[1], 10) : total - 1;
+    const chunkSize = (end - start) + 1;
 
-        if (start > end) {
-            start = end - 1;
-        }
-
-        const chunkSize = (end - start) + 1;
-
-        response.writeHead(206, {
-            'Content-Range': `bytes ${start}-${end}/${total}`,
-            'Accept-Ranges': 'bytes',
-            'Content-Length': chunkSize,
-            'Content-Type': 'video/mp4',
-        });
-
-        const stream = fs.createReadStream(file, {start, end});
-
-        stream.on('open', () => {
-            stream.pipe(response);
-        });
-        stream.on('error', (streamErr) => {
-            response.end(streamErr);
-        });
-
-        return stream;
+    response.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${total}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunkSize,
+      'Content-Type': contentType,
     });
+
+    const stream = fs.createReadStream(file, { start, end });
+
+    stream.on('open', () => {
+      stream.pipe(response);
+    });
+    stream.on('error', (streamErr) => {
+      response.end(streamErr);
+    });
+
+    return stream;
+  });
 };
 
-module.exports = {getParty};
+const getParty = (request, response) => {
+  loadFile(request, response, '../client/party.mp4', 'video/mp4');
+};
+const getBling = (request, response) => {
+  loadFile(request, response, '../client/bling.mp3', 'audio/mpeg');
+};
+const getBird = (request, response) => {
+  loadFile(request, response, '../client/bird.mp4', 'video/mp4');
+};
+
+module.exports = { getParty, getBling, getBird };
